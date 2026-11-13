@@ -36,6 +36,7 @@ from explainer import (
     AIServiceError,
     AIResponseParseError,
 )
+from db import log_usage
 
 # Configure logging
 logging.basicConfig(level=logging.INFO)
@@ -113,6 +114,38 @@ def _validate_language(language_input: str) -> str:
     return ALLOWED_LANGUAGES[clean_lang]
 
 
+def _log_report_usage(source: str, language: str, explanation: dict) -> None:
+    """
+    Extracts anonymous operational metrics (test count, abnormal test count)
+    and logs them to the Supabase database.
+
+    PRIVACY GUARANTEE:
+    Only aggregate numerical counts, the source channel, and the language are recorded.
+    Report text, OCR text, patient information, and test names/values are NEVER logged.
+
+    Non-blocking:
+    Any error during database logging is caught and handled safely so that
+    a database hiccup never interrupts a successful report explanation response.
+    """
+    try:
+        tests = explanation.get("tests", []) if isinstance(explanation, dict) else []
+        tests_count = len(tests)
+        abnormal_count = sum(
+            1
+            for t in tests
+            if isinstance(t, dict) and str(t.get("status", "")).strip().lower() in ("high", "low")
+        )
+
+        log_usage(
+            source=source,
+            language=language,
+            tests_count=tests_count,
+            abnormal_count=abnormal_count,
+        )
+    except Exception as e:
+        logger.warning(f"Failed to record usage metrics to database: {e}")
+
+
 # ---------------------------------------------------------------------------
 # Basic & Health Check Endpoints
 # ---------------------------------------------------------------------------
@@ -162,6 +195,10 @@ def explain_text_endpoint(payload: ExplainTextRequest):
 
     try:
         explanation = explain_report(raw_text, language=target_lang)
+
+        # Log anonymous usage statistics (source='web')
+        _log_report_usage(source="web", language=target_lang, explanation=explanation)
+
         return explanation
 
     except AIConfigurationError as ce:
@@ -322,6 +359,9 @@ def explain_file_endpoint(
     # 8. Explain extracted report text with Gemini
     try:
         explanation = explain_report(extracted_text, language=target_lang)
+
+        # Log anonymous usage statistics (source='web')
+        _log_report_usage(source="web", language=target_lang, explanation=explanation)
 
         # Return structured explanation alongside raw extracted text
         return {
