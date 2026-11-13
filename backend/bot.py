@@ -16,10 +16,11 @@ KEY CAPABILITIES:
 
 import os
 import io
+import json
 import html
 import asyncio
 import logging
-from typing import Dict, Any, List, Optional, Tuple, Set
+from typing import Dict, Any, List, Optional, Tuple, Set, Union
 import httpx
 
 # Import existing core modules
@@ -173,10 +174,20 @@ async def _telegram_post(method: str, payload: Dict[str, Any]) -> Optional[Dict[
     if not base_url:
         return None
 
+    # Defensive cleaning: never transmit reply_markup if None, empty, or not a dict
+    cleaned_payload: Dict[str, Any] = {}
+    for key, value in payload.items():
+        if key == "reply_markup":
+            if isinstance(value, dict) and value:
+                cleaned_payload[key] = value
+            # Intentionally omit reply_markup when None, empty, or invalid
+        else:
+            cleaned_payload[key] = value
+
     url = f"{base_url}/{method}"
     try:
         async with httpx.AsyncClient(timeout=15.0) as client:
-            resp = await client.post(url, json=payload)
+            resp = await client.post(url, json=cleaned_payload)
             data = resp.json()
             if not data.get("ok"):
                 logger.warning(f"Telegram API {method} returned error: {data.get('description')}")
@@ -190,24 +201,39 @@ async def send_message(
     chat_id: int,
     text: str,
     parse_mode: str = "HTML",
-    reply_markup: Optional[Dict[str, Any]] = None,
+    reply_markup: Optional[Union[Dict[str, Any], str]] = None,
 ) -> None:
-    """Sends a formatted message to a Telegram chat, splitting safely if needed."""
+    """
+    Sends a formatted message to a Telegram chat, splitting safely if needed.
+    Completely omits 'reply_markup' when none is provided, avoiding Telegram's
+    'Bad Request: object expected as reply markup' error caused by null values.
+    """
+    # Normalize reply_markup if passed as a JSON string or dict
+    resolved_markup: Optional[Dict[str, Any]] = None
+    if isinstance(reply_markup, dict) and reply_markup:
+        resolved_markup = reply_markup
+    elif isinstance(reply_markup, str) and reply_markup.strip():
+        try:
+            parsed = json.loads(reply_markup)
+            if isinstance(parsed, dict) and parsed:
+                resolved_markup = parsed
+        except Exception as e:
+            logger.warning(f"Could not parse reply_markup string: {e}")
+
     # Chunking helper for Telegram 4096-character limit
     chunks = _split_message(text, max_len=TELEGRAM_MSG_MAX_LENGTH)
     for i, chunk in enumerate(chunks):
-        # Attach reply_markup only to the final chunk
-        markup = reply_markup if i == len(chunks) - 1 else None
-        await _telegram_post(
-            "sendMessage",
-            {
-                "chat_id": chat_id,
-                "text": chunk,
-                "parse_mode": parse_mode,
-                "reply_markup": markup,
-                "disable_web_page_preview": True,
-            },
-        )
+        payload: Dict[str, Any] = {
+            "chat_id": chat_id,
+            "text": chunk,
+            "parse_mode": parse_mode,
+            "disable_web_page_preview": True,
+        }
+        # Attach reply_markup only to the final chunk and only if valid dict object
+        if i == len(chunks) - 1 and resolved_markup is not None:
+            payload["reply_markup"] = resolved_markup
+
+        await _telegram_post("sendMessage", payload)
 
 
 async def send_chat_action(chat_id: int, action: str = "typing") -> None:
