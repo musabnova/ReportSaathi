@@ -10,11 +10,14 @@ Uploaded medical reports and text are processed strictly in-memory and are never
 """
 
 import os
+import hmac
+import asyncio
 import logging
 from pathlib import Path
 from typing import Optional
+from contextlib import asynccontextmanager
 from dotenv import load_dotenv
-from fastapi import FastAPI, UploadFile, File, Form, HTTPException, status
+from fastapi import FastAPI, UploadFile, File, Form, HTTPException, Request, Header, status
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel, Field
 
@@ -37,6 +40,14 @@ from explainer import (
     AIResponseParseError,
 )
 from db import log_usage
+from bot import (
+    init_telegram_bot,
+    shutdown_telegram_bot,
+    handle_telegram_update,
+    track_background_task,
+    get_bot_token,
+    get_secret_token,
+)
 
 # Configure logging
 logging.basicConfig(level=logging.INFO)
@@ -66,11 +77,31 @@ MEDICAL_DISCLAIMER = (
     "Always discuss your medical reports and symptoms directly with a qualified doctor."
 )
 
+# Lifespan Context Manager
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    """
+    Application lifespan manager.
+    Initializes Telegram Bot (webhook or local polling) on startup,
+    and safely terminates background tasks on shutdown.
+    """
+    try:
+        await init_telegram_bot()
+    except Exception as e:
+        logger.warning(f"Telegram Bot startup error: {e}")
+    yield
+    try:
+        await shutdown_telegram_bot()
+    except Exception as e:
+        logger.warning(f"Telegram Bot shutdown error: {e}")
+
+
 # Initialize FastAPI application
 app = FastAPI(
     title="ReportSaathi API",
     description="A plain-language medical report explainer API. For educational purposes only.",
     version="0.1.0",
+    lifespan=lifespan,
 )
 
 # Configure Cross-Origin Resource Sharing (CORS)
@@ -176,6 +207,57 @@ def read_root():
 def health_check():
     """Health check endpoint to verify backend service availability."""
     return {"status": "ok"}
+
+
+# ---------------------------------------------------------------------------
+# Telegram Bot Webhook Endpoint
+# ---------------------------------------------------------------------------
+@app.post("/telegram/webhook", status_code=status.HTTP_200_OK)
+async def telegram_webhook_endpoint(
+    request: Request,
+    x_telegram_bot_api_secret_token: Optional[str] = Header(None),
+):
+    """
+    Secure Webhook endpoint for receiving Telegram updates in production.
+    Validates X-Telegram-Bot-Api-Secret-Token to ensure requests originate from Telegram.
+    Updates are dispatched asynchronously so Telegram receives an immediate 200 OK acknowledgment.
+    """
+    expected_secret = get_secret_token()
+    if not expected_secret:
+        logger.warning("Rejected Telegram webhook: TELEGRAM_SECRET_TOKEN not configured.")
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Webhook secret not configured.",
+        )
+
+    if not x_telegram_bot_api_secret_token or not hmac.compare_digest(
+        expected_secret, x_telegram_bot_api_secret_token
+    ):
+        logger.warning("Rejected Telegram webhook update: invalid or missing secret token header.")
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Invalid Telegram secret token header.",
+        )
+
+    token = get_bot_token()
+    if not token:
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="Telegram Bot is not configured on this server.",
+        )
+
+    try:
+        update_data = await request.json()
+    except Exception:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Invalid JSON payload in Telegram update.",
+        )
+
+    # Dispatch processing asynchronously to ensure immediate HTTP 200 response to Telegram
+    track_background_task(handle_telegram_update(update_data))
+
+    return {"ok": True}
 
 
 # ---------------------------------------------------------------------------
