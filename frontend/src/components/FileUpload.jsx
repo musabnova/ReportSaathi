@@ -1,11 +1,14 @@
 import React, { useRef, useState } from 'react';
+import { UploadCloud, FileText, X, AlertCircle, CheckCircle } from 'lucide-react';
 
 /**
- * File upload component supporting drag-and-drop, file type validation (JPG, PNG, PDF),
- * size limit checks (< 5 MB), and rich visual previews.
+ * Modern Healthcare SaaS File Upload Component
+ * Features large dropzone, explicit "Browse Files" button, drag-and-drop feedback,
+ * validation for JPG, PNG, PDF up to 5 MB, and rich preview card.
  */
 export default function FileUpload({ file, previewUrl, onFileSelected, onFileCleared }) {
   const [isDragActive, setIsDragActive] = useState(false);
+  const [validationError, setValidationError] = useState(null);
   const fileInputRef = useRef(null);
 
   const MAX_SIZE_BYTES = 5 * 1024 * 1024; // 5 MB
@@ -13,19 +16,20 @@ export default function FileUpload({ file, previewUrl, onFileSelected, onFileCle
 
   const validateAndSelect = (selectedFile) => {
     if (!selectedFile) return;
+    setValidationError(null);
 
-    // Check file size
+    // Validate size
     if (selectedFile.size > MAX_SIZE_BYTES) {
-      alert('File size exceeds the 5 MB limit. Please upload a smaller file.');
+      setValidationError('File size exceeds 5 MB. Please upload a smaller document.');
       return;
     }
 
-    // Check extension / MIME type
+    // Validate type / extension
     const isAllowed = ALLOWED_TYPES.includes(selectedFile.type) || 
       /\.(jpe?g|png|pdf)$/i.test(selectedFile.name);
 
     if (!isAllowed) {
-      alert('Unsupported file format. Please upload a JPG, PNG, or PDF file.');
+      setValidationError('Unsupported file format. Please upload a JPG, PNG, or PDF file.');
       return;
     }
 
@@ -59,7 +63,7 @@ export default function FileUpload({ file, previewUrl, onFileSelected, onFileCle
   const isPdf = file?.type === 'application/pdf' || file?.name?.toLowerCase().endsWith('.pdf');
 
   return (
-    <div>
+    <div className="upload-wrapper">
       {!file ? (
         <div
           className={`dropzone ${isDragActive ? 'drag-active' : ''}`}
@@ -87,61 +91,75 @@ export default function FileUpload({ file, previewUrl, onFileSelected, onFileCle
             }}
           />
 
-          <svg
-            className="dropzone-icon"
-            viewBox="0 0 24 24"
-            fill="none"
-            stroke="currentColor"
-            strokeWidth="1.7"
-            strokeLinecap="round"
-            strokeLinejoin="round"
-          >
-            <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" />
-            <polyline points="14 2 14 8 20 8" />
-            <line x1="12" y1="18" x2="12" y2="12" />
-            <line x1="9" y1="15" x2="12" y2="12" />
-            <line x1="15" y1="15" x2="12" y2="12" />
-          </svg>
+          <div className="dropzone-icon-circle">
+            <UploadCloud size={32} className="dropzone-cloud-icon" strokeWidth={1.8} />
+          </div>
 
-          <h3 className="dropzone-title">Upload lab report image or PDF</h3>
-          <p className="dropzone-subtitle">Drag and drop here, or browse files from your device</p>
-          <span className="dropzone-badge">JPG, PNG, PDF up to 5 MB</span>
+          <h3 className="dropzone-title">Drag and drop your medical report here</h3>
+          <p className="dropzone-subtitle">or choose a document from your device to begin analysis</p>
+
+          <button
+            type="button"
+            className="dropzone-browse-btn"
+            onClick={(e) => {
+              e.stopPropagation();
+              fileInputRef.current?.click();
+            }}
+          >
+            Browse Files
+          </button>
+
+          <div className="dropzone-meta-tags">
+            <span className="meta-tag">Supported: PDF, JPG, PNG</span>
+            <span className="meta-dot">·</span>
+            <span className="meta-tag">Max: 5 MB</span>
+            <span className="meta-dot">·</span>
+            <span className="meta-tag">In-Memory OCR</span>
+          </div>
         </div>
       ) : (
         <div className="file-preview-card">
           <div className="file-preview-left">
             {previewUrl && !isPdf ? (
-              <img src={previewUrl} alt="Report preview" className="file-thumbnail" />
+              <img src={previewUrl} alt="Report preview thumbnail" className="file-thumbnail" />
             ) : (
               <div className="file-icon-box" aria-hidden="true">
-                <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                  <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" />
-                  <polyline points="14 2 14 8 20 8" />
-                  <text x="7" y="18" fontSize="6" fontWeight="bold" fill="currentColor">PDF</text>
-                </svg>
+                <FileText size={28} className="file-icon-doc" />
+                <span className="file-type-badge">{isPdf ? 'PDF' : 'IMG'}</span>
               </div>
             )}
-            <div className="file-info">
-              <p className="file-name" title={file.name}>{file.name}</p>
-              <p className="file-size">{formatFileSize(file.size)}</p>
+            <div className="file-details">
+              <div className="file-name-row">
+                <p className="file-name" title={file.name}>{file.name}</p>
+                <CheckCircle size={15} className="file-verified-icon" />
+              </div>
+              <p className="file-size-info">
+                <span>{formatFileSize(file.size)}</span>
+                <span className="meta-dot">·</span>
+                <span>Ready for analysis</span>
+              </p>
             </div>
           </div>
 
           <button
             type="button"
-            className="remove-btn"
+            className="remove-file-btn"
             onClick={onFileCleared}
-            title="Remove document"
+            title="Remove document and select another"
             aria-label="Remove document"
           >
-            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
-              <line x1="18" y1="6" x2="6" y2="18" />
-              <line x1="6" y1="6" x2="18" y2="18" />
-            </svg>
+            <X size={18} strokeWidth={2.4} />
           </button>
+        </div>
+      )}
+
+      {/* Inline Validation Error Message */}
+      {validationError && (
+        <div className="upload-validation-error">
+          <AlertCircle size={16} />
+          <span>{validationError}</span>
         </div>
       )}
     </div>
   );
 }
-

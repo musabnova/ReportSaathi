@@ -1,4 +1,5 @@
 import React from 'react';
+import { ClipboardPaste, Trash2 } from 'lucide-react';
 
 /**
  * Text upload component for pasting medical report contents directly.
@@ -21,40 +22,42 @@ Test Results:
 
   return (
     <div className="textarea-container">
+      <div className="textarea-header-bar">
+        <span className="textarea-label">Report Text Content</span>
+        <button
+          type="button"
+          className="sample-btn"
+          onClick={handleLoadSample}
+        >
+          <ClipboardPaste size={14} />
+          <span>Paste Sample CBC Report</span>
+        </button>
+      </div>
+
       <textarea
         className="report-textarea"
-        placeholder="Paste your lab report text here (e.g. CBC, lipid profile, thyroid panel, blood sugar)..."
+        placeholder="Paste your medical laboratory report text here (e.g., Complete Blood Count, Lipid Profile, Thyroid Panel, Blood Glucose, or Urine Routine)..."
         value={text}
         onChange={(e) => onTextChange(e.target.value)}
-        rows={8}
+        rows={9}
       />
 
       <div className="textarea-footer">
-        <button type="button" className="sample-btn" onClick={handleLoadSample}>
-          Paste Sample CBC Report
-        </button>
-
-        <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+        <div className="footer-left-info">
           {text.trim().length > 0 && (
             <button
               type="button"
               onClick={onClearText}
-              style={{
-                background: 'none',
-                border: 'none',
-                color: '#64748b',
-                cursor: 'pointer',
-                fontSize: '0.8rem',
-                textDecoration: 'underline',
-              }}
+              className="clear-text-btn"
             >
-              Clear text
+              <Trash2 size={13} />
+              <span>Clear text</span>
             </button>
           )}
-          <span className="char-count">{text.length} characters</span>
         </div>
+
+        <span className="char-count">{text.length} characters</span>
       </div>
     </div>
   );
 }
-

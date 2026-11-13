@@ -1,5 +1,8 @@
-import React, { useState, useEffect } from 'react';
-import Header from './components/Header';
+import React, { useState, useEffect, useRef } from 'react';
+import Navbar from './components/Navbar';
+import HeroSection from './components/HeroSection';
+import TrustFeatures from './components/TrustFeatures';
+import HowItWorks from './components/HowItWorks';
 import DisclaimerBanner from './components/DisclaimerBanner';
 import TabNavigation from './components/TabNavigation';
 import FileUpload from './components/FileUpload';
@@ -7,11 +10,15 @@ import TextUpload from './components/TextUpload';
 import ResultsSection from './components/ResultsSection';
 import LoadingSpinner from './components/LoadingSpinner';
 import ErrorAlert from './components/ErrorAlert';
+import Footer from './components/Footer';
+import LanguageSelector from './components/LanguageSelector';
 import { explainFile, explainText } from './services/api';
+import { Sparkles, ArrowRight } from 'lucide-react';
 
 /**
- * Main application component orchestrating user inputs, API calls,
- * and presentation of medical report explanations.
+ * ReportSaathi — Main Application Coordinator
+ * Integrates the modern SaaS landing sections (Hero, How It Works, Features)
+ * with the functional Report Analysis Workspace and Results Dashboard.
  */
 export default function App() {
   const [selectedLanguage, setSelectedLanguage] = useState('English');
@@ -26,6 +33,8 @@ export default function App() {
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState(null);
   const [result, setResult] = useState(null);
+
+  const workspaceRef = useRef(null);
 
   // Clean up object URL when file changes or unmounts
   useEffect(() => {
@@ -43,10 +52,23 @@ export default function App() {
     }
   }, [file]);
 
+  const scrollToWorkspace = () => {
+    const el = document.getElementById('workspace');
+    if (el) {
+      el.scrollIntoView({ behavior: 'smooth' });
+    }
+  };
+
+  const scrollToHowItWorks = () => {
+    const el = document.getElementById('how-it-works');
+    if (el) {
+      el.scrollIntoView({ behavior: 'smooth' });
+    }
+  };
+
   const handleFileSelected = (selectedFile) => {
     setFile(selectedFile);
     setError(null);
-    setResult(null);
   };
 
   const handleFileCleared = () => {
@@ -62,6 +84,10 @@ export default function App() {
   const handleReset = () => {
     setResult(null);
     setError(null);
+    // Smooth scroll back to workspace
+    setTimeout(() => {
+      scrollToWorkspace();
+    }, 100);
   };
 
   // Determine if Explain button should be enabled
@@ -71,12 +97,18 @@ export default function App() {
   );
 
   const handleSubmit = async (e) => {
-    e.preventDefault();
+    if (e) e.preventDefault();
     if (!canSubmit || isLoading) return;
 
     setIsLoading(true);
     setError(null);
     setResult(null);
+
+    // Smooth scroll to loading area
+    setTimeout(() => {
+      const loadingEl = document.getElementById('workspace-activity');
+      if (loadingEl) loadingEl.scrollIntoView({ behavior: 'smooth' });
+    }, 50);
 
     try {
       let responseData;
@@ -86,6 +118,12 @@ export default function App() {
         responseData = await explainText(pastedText.trim(), selectedLanguage);
       }
       setResult(responseData);
+
+      // Smooth scroll to results
+      setTimeout(() => {
+        const resultsEl = document.getElementById('results');
+        if (resultsEl) resultsEl.scrollIntoView({ behavior: 'smooth' });
+      }, 100);
     } catch (err) {
       setError(err.message || 'Failed to explain medical report. Please try again.');
     } finally {
@@ -94,89 +132,124 @@ export default function App() {
   };
 
   return (
-    <div className="app-container">
-      {/* 1. Header with App Title & Language Selector */}
-      <Header
+    <div className="saas-app-wrapper">
+      {/* 1. Global Navigation Bar */}
+      <Navbar
         selectedLanguage={selectedLanguage}
         onLanguageChange={(lang) => {
           setSelectedLanguage(lang);
-          // If we already have results, clearing allows re-explaining in new language
-          if (result) {
-            setResult(null);
-          }
+          // If viewing results, user might want to re-explain in new language
         }}
+        onAnalyzeClick={scrollToWorkspace}
       />
 
-      {/* 2. Persistent Educational Medical Disclaimer */}
-      <DisclaimerBanner />
+      {/* 2. Hero Section */}
+      <HeroSection
+        onAnalyzeClick={scrollToWorkspace}
+        onHowItWorksClick={scrollToHowItWorks}
+      />
 
-      {/* 3. Input Section Card (shown if no active result is displayed) */}
-      {!result && (
-        <main className="card">
-          {/* Tab Navigation: Upload Report vs. Paste Text */}
-          <TabNavigation
-            activeTab={activeTab}
-            onTabChange={(tab) => {
-              setActiveTab(tab);
-              setError(null);
-            }}
-          />
+      {/* 3. Features & Trust Pillars */}
+      <TrustFeatures />
 
-          {/* Tab 1: File Upload */}
-          {activeTab === 'upload' && (
-            <FileUpload
-              file={file}
-              previewUrl={previewUrl}
-              onFileSelected={handleFileSelected}
-              onFileCleared={handleFileCleared}
-            />
-          )}
+      {/* 4. How It Works Pipeline */}
+      <HowItWorks />
 
-          {/* Tab 2: Paste Text */}
-          {activeTab === 'paste' && (
-            <TextUpload
-              text={pastedText}
-              onTextChange={(val) => {
-                setPastedText(val);
-                if (error) setError(null);
-              }}
-              onClearText={handleClearText}
-            />
-          )}
+      {/* 5. Report Analysis Workspace */}
+      <section id="workspace" ref={workspaceRef} className="workspace-section">
+        <div className="workspace-container">
+          <div className="workspace-header-row">
+            <div>
+              <span className="workspace-badge">ANALYSIS WORKSPACE</span>
+              <h2 className="workspace-title">Report Analysis Workspace</h2>
+              <p className="workspace-description">
+                Upload your document (PDF, JPG, PNG up to 5 MB) or paste clinical report text. Select your preferred language to receive clear, plain-language insights.
+              </p>
+            </div>
 
-          {/* Explain Action Button */}
-          <div className="action-section">
-            <button
-              type="button"
-              className="submit-btn"
-              disabled={!canSubmit}
-              onClick={handleSubmit}
-            >
-              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
-                <circle cx="11" cy="11" r="8" />
-                <line x1="21" y1="21" x2="16.65" y2="16.65" />
-                <line x1="11" y1="8" x2="11" y2="14" />
-                <line x1="8" y1="11" x2="14" y2="11" />
-              </svg>
-              Explain My Report
-            </button>
+            {/* Language Selector embedded in Workspace for immediate accessibility */}
+            <div className="workspace-lang-box">
+              <span className="workspace-lang-label">Language:</span>
+              <LanguageSelector
+                selectedLanguage={selectedLanguage}
+                onLanguageChange={(lang) => setSelectedLanguage(lang)}
+              />
+            </div>
           </div>
-        </main>
-      )}
 
-      {/* 4. Loading Indicator */}
-      {isLoading && <LoadingSpinner isFile={activeTab === 'upload'} />}
+          {/* Persistent Educational Medical Disclaimer */}
+          <DisclaimerBanner />
 
-      {/* 5. Error Alert Box */}
-      {error && !isLoading && (
-        <ErrorAlert message={error} onDismiss={() => setError(null)} />
-      )}
+          {/* Activity Anchor for auto-scrolling */}
+          <div id="workspace-activity">
+            {/* Loading Indicator */}
+            {isLoading && <LoadingSpinner isFile={activeTab === 'upload'} />}
 
-      {/* 6. Structured Results View */}
-      {result && !isLoading && (
-        <ResultsSection result={result} onReset={handleReset} />
-      )}
+            {/* Error Alert Box */}
+            {error && !isLoading && (
+              <ErrorAlert message={error} onDismiss={() => setError(null)} />
+            )}
+
+            {/* Results Presentation Dashboard */}
+            {result && !isLoading && (
+              <ResultsSection result={result} onReset={handleReset} />
+            )}
+          </div>
+
+          {/* Input Section Card (shown when not actively displaying results) */}
+          {!result && (
+            <div className="workspace-card">
+              {/* Tab Navigation: Upload Report vs. Paste Text */}
+              <TabNavigation
+                activeTab={activeTab}
+                onTabChange={(tab) => {
+                  setActiveTab(tab);
+                  setError(null);
+                }}
+              />
+
+              {/* Tab 1: File Upload */}
+              {activeTab === 'upload' && (
+                <FileUpload
+                  file={file}
+                  previewUrl={previewUrl}
+                  onFileSelected={handleFileSelected}
+                  onFileCleared={handleFileCleared}
+                />
+              )}
+
+              {/* Tab 2: Paste Text */}
+              {activeTab === 'paste' && (
+                <TextUpload
+                  text={pastedText}
+                  onTextChange={(val) => {
+                    setPastedText(val);
+                    if (error) setError(null);
+                  }}
+                  onClearText={handleClearText}
+                />
+              )}
+
+              {/* Explain Action Button */}
+              <div className="workspace-submit-row">
+                <button
+                  type="button"
+                  className="analyze-report-btn"
+                  disabled={!canSubmit || isLoading}
+                  onClick={handleSubmit}
+                >
+                  <Sparkles size={18} className="btn-sparkle-icon" />
+                  <span>Analyze My Report</span>
+                  <ArrowRight size={16} strokeWidth={2.4} />
+                </button>
+              </div>
+            </div>
+          )}
+        </div>
+      </section>
+
+      {/* 6. Footer */}
+      <Footer />
     </div>
   );
 }
-

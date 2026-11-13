@@ -1,16 +1,28 @@
 import React, { useState } from 'react';
 import StatusBadge from './StatusBadge';
+import { 
+  Sparkles, 
+  HelpCircle, 
+  RotateCcw, 
+  ChevronDown, 
+  ChevronUp, 
+  FileSearch, 
+  AlertCircle, 
+  Activity, 
+  CheckCircle2, 
+  AlertTriangle 
+} from 'lucide-react';
 
 /**
- * Results presentation component displaying:
- * 1. Plain-language overall summary (or a non-lab-document notice)
- * 2. Individual test cards with values, reference ranges, status badges, and meanings
- * 3. Suggested questions for the doctor
- * 4. Raw extracted OCR text (collapsible)
- *
- * When Gemini determines the input is NOT a medical laboratory report,
- * it returns tests: [] and questions_for_doctor: []. In that case we
- * show a clear info notice instead of empty sections.
+ * Modern Healthcare SaaS Results Dashboard
+ * Displays:
+ * 1. KPI Metrics Bar (Total Tests, Normal Tests, Out-of-Range Attention Tests)
+ * 2. Plain-language Overall Explanation Summary
+ * 3. Individual Test Result Cards with Name, Value, Reference Range, Status Badge, and Meaning
+ * 4. Questions to Discuss with Your Doctor
+ * 5. Non-Lab Document Notice (when no lab tests are found)
+ * 6. Collapsible Raw OCR Extracted Text Accordion
+ * 7. Action to analyze another report
  */
 export default function ResultsSection({ result, onReset }) {
   const [showOcrText, setShowOcrText] = useState(false);
@@ -19,157 +31,201 @@ export default function ResultsSection({ result, onReset }) {
 
   const { summary, tests = [], questions_for_doctor = [], extracted_text } = result;
 
-  // Detect non-lab-document results:
-  // Gemini returns empty tests + empty questions when the input is not a medical report.
+  // Detect non-laboratory document results
+  // Gemini returns empty tests and empty questions when input is not a medical lab report.
   const isNonLabDocument = tests.length === 0 && questions_for_doctor.length === 0;
 
-  return (
-    <div className="results-container">
+  // Calculate metrics
+  const totalTests = tests.length;
+  const abnormalTests = tests.filter((t) => {
+    const s = (t.status || '').toLowerCase().trim();
+    return s === 'high' || s === 'low';
+  }).length;
+  const normalTests = tests.filter((t) => (t.status || '').toLowerCase().trim() === 'normal').length;
 
+  return (
+    <div className="results-container" id="results">
       {/* ── Non-Lab Document Notice ── */}
       {isNonLabDocument ? (
-        <div className="no-lab-results-notice" role="status">
-          <div className="notice-icon-row">
-            {/* Info-circle icon */}
-            <svg
-              className="notice-icon"
-              width="28"
-              height="28"
-              viewBox="0 0 24 24"
-              fill="none"
-              stroke="currentColor"
-              strokeWidth="2"
-              strokeLinecap="round"
-              strokeLinejoin="round"
-              aria-hidden="true"
-            >
-              <circle cx="12" cy="12" r="10" />
-              <line x1="12" y1="16" x2="12" y2="12" />
-              <line x1="12" y1="8" x2="12.01" y2="8" />
-            </svg>
-            <h2 className="notice-title">No Laboratory Results Found</h2>
+        <div className="no-lab-results-card" role="status">
+          <div className="notice-icon-circle">
+            <AlertCircle size={28} className="notice-icon-svg" />
           </div>
 
-          {/* Show Gemini's summary, which explains what was detected */}
-          <p className="notice-body">
-            {summary || 'The uploaded document does not appear to contain medical laboratory test results.'}
-          </p>
-
-          <p className="notice-hint">
-            Try uploading a blood test, urine test, or other laboratory report
-            that includes test names, values, and reference ranges.
-          </p>
+          <div className="notice-text-content">
+            <h3 className="notice-card-title">No Medical Laboratory Results Detected</h3>
+            <p className="notice-card-body">
+              {summary || 'The provided document or text does not appear to contain recognized clinical laboratory test values.'}
+            </p>
+            <div className="notice-guidance-box">
+              <span className="guidance-label">Helpful Tip:</span>
+              <p className="guidance-text">
+                Please upload a standard pathology or laboratory report (e.g., Complete Blood Count, Lipid Profile, Liver/Kidney Function Test, Thyroid Panel, Blood Glucose, or Urine Routine) that includes numerical values and laboratory reference ranges.
+              </p>
+            </div>
+          </div>
         </div>
       ) : (
         <>
-          {/* ── 1. Summary Card (shown only when lab results exist) ── */}
-          <div className="summary-card">
-            <div className="card-header-with-icon">
-              <div className="card-header-icon" aria-hidden="true">
-                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
-                  <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" />
-                  <polyline points="14 2 14 8 20 8" />
-                  <line x1="16" y1="13" x2="8" y2="13" />
-                  <line x1="16" y1="17" x2="8" y2="17" />
-                  <polyline points="10 9 9 9 8 9" />
-                </svg>
+          {/* ── KPI Metric Statistics Cards ── */}
+          <div className="results-metrics-grid">
+            {/* Metric 1: Total Tests */}
+            <div className="metric-kpi-card">
+              <div className="metric-kpi-header">
+                <span className="metric-kpi-title">Tests Detected</span>
+                <div className="metric-kpi-icon-box kpi-blue">
+                  <Activity size={18} />
+                </div>
               </div>
-              <h2 className="section-title">Report Summary</h2>
+              <div className="metric-kpi-value">{totalTests}</div>
+              <span className="metric-kpi-subtitle">Extracted from report</span>
             </div>
-            <p className="summary-text">{summary || 'No summary available.'}</p>
+
+            {/* Metric 2: Within Reference Range */}
+            <div className="metric-kpi-card">
+              <div className="metric-kpi-header">
+                <span className="metric-kpi-title">Within Range</span>
+                <div className="metric-kpi-icon-box kpi-green">
+                  <CheckCircle2 size={18} />
+                </div>
+              </div>
+              <div className="metric-kpi-value">{normalTests}</div>
+              <span className="metric-kpi-subtitle">Normal values</span>
+            </div>
+
+            {/* Metric 3: Out of Range / Attention */}
+            <div className="metric-kpi-card">
+              <div className="metric-kpi-header">
+                <span className="metric-kpi-title">Needs Attention</span>
+                <div className={`metric-kpi-icon-box ${abnormalTests > 0 ? 'kpi-amber' : 'kpi-green'}`}>
+                  <AlertTriangle size={18} />
+                </div>
+              </div>
+              <div className="metric-kpi-value">{abnormalTests}</div>
+              <span className="metric-kpi-subtitle">
+                {abnormalTests > 0 ? 'High or Low values flagged' : 'No out-of-range values'}
+              </span>
+            </div>
           </div>
 
-          {/* ── 2. Detected Lab Tests ── */}
+          {/* ── 1. Executive Summary Card ── */}
+          <div className="result-card summary-presentation-card">
+            <div className="result-card-header">
+              <div className="header-icon-badge">
+                <Sparkles size={18} className="header-badge-icon" />
+              </div>
+              <div>
+                <h3 className="result-card-title">Overall Report Explanation</h3>
+                <span className="result-card-subtitle">Plain-language executive analysis</span>
+              </div>
+            </div>
+            <p className="summary-paragraph">
+              {summary || 'No summary available for this report.'}
+            </p>
+          </div>
+
+          {/* ── 2. Individual Test Cards Grid ── */}
           {tests.length > 0 && (
-            <div className="card">
-              <div className="card-header-with-icon">
-                <div className="card-header-icon" aria-hidden="true">
-                  <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
-                    <path d="M22 12h-4l-3 9L9 3l-3 9H2" />
-                  </svg>
+            <div className="result-card">
+              <div className="result-card-header">
+                <div className="header-icon-badge">
+                  <Activity size={18} className="header-badge-icon" />
                 </div>
-                <h2 className="section-title">Test Results Explained ({tests.length})</h2>
+                <div>
+                  <h3 className="result-card-title">Detailed Test Breakdown ({tests.length})</h3>
+                  <span className="result-card-subtitle">Every reported laboratory measurement explained</span>
+                </div>
               </div>
 
-              <div className="tests-grid">
+              <div className="tests-cards-grid">
                 {tests.map((test, index) => (
-                  <div key={index} className="test-item-card">
-                    <div className="test-card-top">
-                      <h3 className="test-name">{test.name || 'Unnamed Test'}</h3>
+                  <div key={index} className="test-card-modern">
+                    <div className="test-card-header-row">
+                      <h4 className="test-name-heading">{test.name || 'Unnamed Test'}</h4>
                       <StatusBadge status={test.status} />
                     </div>
 
-                    <div className="test-metrics-row">
-                      <div className="metric-item">
-                        <span className="metric-label">Reported Value:</span>
-                        <span className="metric-val">{test.value || 'N/A'}</span>
+                    <div className="test-stats-row">
+                      <div className="test-stat-item">
+                        <span className="stat-label">Reported Value:</span>
+                        <span className="stat-val stat-val-bold">{test.value || 'N/A'}</span>
                       </div>
-                      <div className="metric-item">
-                        <span className="metric-label">Reference Range:</span>
-                        <span className="metric-val">{test.normal_range || 'Not specified'}</span>
+                      <div className="test-stat-item">
+                        <span className="stat-label">Reference Range:</span>
+                        <span className="stat-val">{test.normal_range || 'Not specified'}</span>
                       </div>
                     </div>
 
-                    <p className="test-meaning">{test.meaning}</p>
+                    <div className="test-meaning-box">
+                      <span className="meaning-label">Plain Meaning:</span>
+                      <p className="meaning-text">{test.meaning || 'Explanation not provided.'}</p>
+                    </div>
                   </div>
                 ))}
               </div>
             </div>
           )}
 
-          {/* ── 3. Questions to Ask Your Doctor ── */}
+          {/* ── 3. Questions for Your Doctor ── */}
           {questions_for_doctor.length > 0 && (
-            <div className="questions-card">
-              <div className="card-header-with-icon">
-                <div className="card-header-icon" aria-hidden="true">
-                  <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
-                    <circle cx="12" cy="12" r="10" />
-                    <path d="M9.09 9a3 3 0 0 1 5.83 1c0 2-3 3-3 3" />
-                    <line x1="12" y1="17" x2="12.01" y2="17" />
-                  </svg>
+            <div className="result-card questions-presentation-card">
+              <div className="result-card-header">
+                <div className="header-icon-badge question-badge-icon-box">
+                  <HelpCircle size={18} className="question-badge-icon" />
                 </div>
-                <h2 className="section-title">Questions to Ask Your Doctor</h2>
+                <div>
+                  <h3 className="result-card-title">Questions to Discuss with Your Doctor</h3>
+                  <span className="result-card-subtitle">Recommended talking points for your next medical consultation</span>
+                </div>
               </div>
 
-              <ul className="questions-list">
+              <div className="questions-card-list">
                 {questions_for_doctor.map((q, idx) => (
-                  <li key={idx} className="question-item">
-                    <span className="question-bullet" aria-hidden="true">&#x25C9;</span>
-                    <span>{q}</span>
-                  </li>
+                  <div key={idx} className="question-card-item">
+                    <span className="question-counter" aria-hidden="true">{idx + 1}</span>
+                    <p className="question-text-content">{q}</p>
+                  </div>
                 ))}
-              </ul>
+              </div>
             </div>
           )}
         </>
       )}
 
-      {/* ── 4. Collapsible OCR Extracted Text (always shown if available) ── */}
+      {/* ── 4. Collapsible OCR Extracted Text Accordion ── */}
       {extracted_text && (
-        <div className="ocr-accordion">
+        <div className="ocr-accordion-wrapper">
           <button
             type="button"
-            className="ocr-accordion-header"
+            className="ocr-accordion-toggle-btn"
             onClick={() => setShowOcrText(!showOcrText)}
             aria-expanded={showOcrText}
           >
-            <span>View Raw Extracted Document Text</span>
-            <span>{showOcrText ? '▲ Hide' : '▼ View'}</span>
+            <div className="ocr-toggle-left">
+              <FileSearch size={17} className="ocr-search-icon" />
+              <span>View Raw Extracted Document Text</span>
+            </div>
+            <div className="ocr-toggle-right">
+              <span className="ocr-toggle-state-text">{showOcrText ? 'Hide Text' : 'Show Text'}</span>
+              {showOcrText ? <ChevronUp size={16} /> : <ChevronDown size={16} />}
+            </div>
           </button>
+
           {showOcrText && (
-            <pre className="ocr-raw-text">{extracted_text}</pre>
+            <div className="ocr-accordion-body">
+              <pre className="ocr-raw-display">{extracted_text}</pre>
+            </div>
           )}
         </div>
       )}
 
-      {/* ── 5. Start New Explanation Button ── */}
-      <button type="button" className="reset-btn" onClick={onReset}>
-        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
-          <polyline points="1 4 1 10 7 10" />
-          <path d="M3.51 15a9 9 0 1 0 2.13-9.36L1 10" />
-        </svg>
-        Explain Another Report
-      </button>
+      {/* ── 5. Action: Explain Another Report ── */}
+      <div className="results-action-row">
+        <button type="button" className="analyze-another-btn" onClick={onReset}>
+          <RotateCcw size={16} strokeWidth={2.2} />
+          <span>Analyze Another Report</span>
+        </button>
+      </div>
     </div>
   );
 }

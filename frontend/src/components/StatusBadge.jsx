@@ -2,37 +2,56 @@ import React from 'react';
 
 /**
  * Reusable Status Badge Component.
- * Maps status values to exact color schemes specified in PROJECT_SPEC.md:
- * Green = Normal, Red = High, Blue = Low, Grey = Unknown.
+ * Accessible visual status indicators:
+ * Green = Normal (within range)
+ * Red = High (out of range)
+ * Blue = Low (below reference range)
+ * Grey = Unknown
  */
 export default function StatusBadge({ status }) {
   const normalizedStatus = (status || 'unknown').toLowerCase().trim();
 
   let config = {
-    className: 'unknown',
+    className: 'status-unknown',
     label: 'Unknown',
+    dotClass: 'dot-unknown',
   };
 
   switch (normalizedStatus) {
     case 'normal':
-      config = { className: 'normal', label: 'Normal' };
+      config = {
+        className: 'status-normal',
+        label: 'Normal',
+        dotClass: 'dot-normal',
+      };
       break;
     case 'high':
-      config = { className: 'high', label: 'High' };
+      config = {
+        className: 'status-high',
+        label: 'High',
+        dotClass: 'dot-high',
+      };
       break;
     case 'low':
-      config = { className: 'low', label: 'Low' };
+      config = {
+        className: 'status-low',
+        label: 'Low',
+        dotClass: 'dot-low',
+      };
       break;
     default:
-      config = { className: 'unknown', label: 'Unknown' };
+      config = {
+        className: 'status-unknown',
+        label: 'Unknown',
+        dotClass: 'dot-unknown',
+      };
       break;
   }
 
   return (
-    <span className={`status-badge ${config.className}`}>
-      <span className="status-dot" aria-hidden="true" />
-      {config.label}
+    <span className={`status-pill ${config.className}`} role="status">
+      <span className={`status-dot ${config.dotClass}`} aria-hidden="true" />
+      <span className="status-label">{config.label}</span>
     </span>
   );
 }
-
