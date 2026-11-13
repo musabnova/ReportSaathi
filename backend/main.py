@@ -74,10 +74,23 @@ app = FastAPI(
 )
 
 # Configure Cross-Origin Resource Sharing (CORS)
-# Currently allowing all origins for development; will restrict to specific domains in production
+# Reads ALLOWED_ORIGINS from environment variables (comma-separated).
+# Defaults to wildcard ("*") for local development if unset or set to "*".
+_raw_allowed_origins = os.getenv("ALLOWED_ORIGINS", "*").strip()
+if _raw_allowed_origins == "*" or not _raw_allowed_origins:
+    ALLOWED_ORIGINS = ["*"]
+else:
+    ALLOWED_ORIGINS = [
+        origin.strip()
+        for origin in _raw_allowed_origins.split(",")
+        if origin.strip()
+    ]
+    if not ALLOWED_ORIGINS:
+        ALLOWED_ORIGINS = ["*"]
+
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],
+    allow_origins=ALLOWED_ORIGINS,
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],

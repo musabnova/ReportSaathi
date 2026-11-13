@@ -1,0 +1,46 @@
+# =============================================================================
+# ReportSaathi - Backend .dockerignore
+# Prevents secrets, virtual environments, and temporary files from entering the Docker image
+# =============================================================================
+
+# Environment files and credentials (CRITICAL: never bake secrets into image)
+.env
+.env.*
+!.env.example
+
+# Python cache and compiled files
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.pytest_cache/
+.coverage
+htmlcov/
+
+# Virtual environments
+venv/
+.venv/
+env/
+ENV/
+
+# Git and version control
+.git/
+.gitignore
+
+# Docker files
+Dockerfile
+.dockerignore
+
+# IDE and OS specific files
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+.DS_Store
+Thumbs.db
+
+# Test scripts and temporary artifacts
+scratch/
+tests/
+
