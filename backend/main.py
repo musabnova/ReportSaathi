@@ -81,9 +81,9 @@ if _raw_allowed_origins == "*" or not _raw_allowed_origins:
     ALLOWED_ORIGINS = ["*"]
 else:
     ALLOWED_ORIGINS = [
-        origin.strip()
+        origin.strip().rstrip("/")
         for origin in _raw_allowed_origins.split(",")
-        if origin.strip()
+        if origin.strip().rstrip("/")
     ]
     if not ALLOWED_ORIGINS:
         ALLOWED_ORIGINS = ["*"]

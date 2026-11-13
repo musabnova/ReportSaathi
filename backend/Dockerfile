@@ -9,7 +9,8 @@ FROM python:3.11-slim
 # Prevent Python from writing bytecode (.pyc) and enable unbuffered streaming logs
 ENV PYTHONDONTWRITEBYTECODE=1 \
     PYTHONUNBUFFERED=1 \
-    PORT=8000
+    PORT=8000 \
+    TESSDATA_PREFIX=/usr/share/tesseract-ocr/5/tessdata
 
 # Install Linux system dependencies:
 # - tesseract-ocr: Tesseract OCR engine
