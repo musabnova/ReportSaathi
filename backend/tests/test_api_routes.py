@@ -166,3 +166,25 @@ def test_explain_file_signature_mismatch(client, monkeypatch):
     response = client.post("/explain-file", files=files, data={"language": "English"})
     assert response.status_code == 415
     assert "Invalid file signature" in response.json()["detail"]
+
+
+def test_explain_file_ocr_internal_error_does_not_expose_details(client, monkeypatch):
+    """POST /explain-file returns a safe static 500 message and never leaks internal exception details or paths."""
+    def fake_crashed_extract_text(file_bytes, mime_type):
+        raise RuntimeError("Internal crash in C:\\Program Files\\Tesseract-OCR\\tesseract.exe: stack overflow at 0x7FFF")
+
+    monkeypatch.setattr(main, "extract_text", fake_crashed_extract_text)
+
+    valid_pdf_bytes = b"%PDF-1.4 test document"
+    files = {"file": ("blood_report.pdf", valid_pdf_bytes, "application/pdf")}
+
+    response = client.post("/explain-file", files=files, data={"language": "English"})
+
+    assert response.status_code == 500
+    detail = response.json()["detail"]
+    assert detail == "An internal error occurred while extracting text from the document. Please ensure the document is clear and try again."
+
+    # Ensure sensitive internal paths and stack details are not exposed to the client
+    assert "Tesseract-OCR" not in response.text
+    assert "stack overflow" not in response.text
+    assert "0x7FFF" not in response.text

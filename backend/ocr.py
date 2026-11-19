@@ -126,6 +126,37 @@ _configure_ocr_binaries()
 
 
 # ---------------------------------------------------------------------------
+# Multilingual OCR Language Detection
+# ---------------------------------------------------------------------------
+TARGET_OCR_LANGUAGES = ["eng", "hin", "kan"]
+DEFAULT_OCR_LANGUAGE = "eng"
+
+
+def get_available_ocr_languages() -> str:
+    """
+    Detects installed Tesseract language packs using pytesseract.get_languages(config="").
+    Builds a combined language string (e.g. 'eng+hin+kan') using available languages
+    among eng, hin, and kan.
+    Falls back gracefully to 'eng' if language detection fails or if only English is present.
+
+    Returns:
+        str: Plus-separated language string suitable for pytesseract (e.g., 'eng+hin+kan' or 'eng').
+    """
+    try:
+        installed = pytesseract.get_languages(config="")
+        if isinstance(installed, list):
+            available = [lang for lang in TARGET_OCR_LANGUAGES if lang in installed]
+            if available:
+                return "+".join(available)
+    except Exception as e:
+        logger.warning(
+            f"Could not query Tesseract installed languages: {e}. Falling back to '{DEFAULT_OCR_LANGUAGE}'."
+        )
+
+    return DEFAULT_OCR_LANGUAGE
+
+
+# ---------------------------------------------------------------------------
 # Text Cleaning Helper
 # ---------------------------------------------------------------------------
 def clean_text(raw_text: str) -> str:
@@ -191,8 +222,10 @@ def _extract_from_image(file_bytes: bytes) -> str:
         with Image.open(io.BytesIO(file_bytes)) as image:
             # Convert to grayscale for cleaner contrast
             grayscale_image = image.convert("L")
-            # Run Tesseract OCR in-memory
-            text = pytesseract.image_to_string(grayscale_image)
+            # Detect available OCR languages (eng, hin, kan)
+            ocr_lang = get_available_ocr_languages()
+            # Run Tesseract OCR in-memory with multilingual support
+            text = pytesseract.image_to_string(grayscale_image, lang=ocr_lang)
             return text
 
     except UnidentifiedImageError as e:
@@ -275,10 +308,11 @@ def _extract_from_pdf(file_bytes: bytes) -> str:
         # Convert in-memory PDF bytes to in-memory PIL images
         pages = convert_from_bytes(file_bytes, **poppler_kwargs)
         ocr_pages = []
+        ocr_lang = get_available_ocr_languages()
 
         for page_img in pages:
             gray_img = page_img.convert("L")
-            page_ocr_text = pytesseract.image_to_string(gray_img)
+            page_ocr_text = pytesseract.image_to_string(gray_img, lang=ocr_lang)
             if page_ocr_text.strip():
                 ocr_pages.append(page_ocr_text.strip())
 

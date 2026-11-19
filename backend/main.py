@@ -13,13 +13,18 @@ import os
 import hmac
 import asyncio
 import logging
+import ipaddress
 from pathlib import Path
 from typing import Optional
 from contextlib import asynccontextmanager
 from dotenv import load_dotenv
 from fastapi import FastAPI, UploadFile, File, Form, HTTPException, Request, Header, status
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import JSONResponse
 from pydantic import BaseModel, Field
+from slowapi import Limiter
+from slowapi.errors import RateLimitExceeded
+from slowapi.middleware import SlowAPIMiddleware
 
 # Robust environment variable loading
 _env_path = Path(__file__).resolve().parent / ".env"
@@ -96,6 +101,76 @@ async def lifespan(app: FastAPI):
         logger.warning(f"Telegram Bot shutdown error: {e}")
 
 
+# Number of trusted reverse proxies in front of the application (e.g., Render load balancer = 1)
+FORWARDED_PROXIES_COUNT = int(os.getenv("FORWARDED_PROXIES_COUNT", "1").strip() or "1")
+
+
+def get_client_ip(request: Request) -> str:
+    """
+    Securely extracts the client IP address without blindly trusting client-supplied
+    X-Forwarded-For headers.
+
+    Behind a reverse proxy (like Render's Envoy load balancer), the proxy appends the
+    connecting client's authentic IP to the end of the X-Forwarded-For header. Blindly
+    taking the first IP allows attackers to spoof arbitrary IPs by prepending them.
+    By indexing from the right (-FORWARDED_PROXIES_COUNT), we extract the genuine IP
+    recorded by the trusted reverse proxy layer.
+
+    Validates that the candidate is a syntactically valid IPv4 or IPv6 address.
+    Falls back safely to request.client.host or '127.0.0.1'.
+    """
+    forwarded = request.headers.get("X-Forwarded-For")
+    if forwarded:
+        raw_ips = [item.strip() for item in forwarded.split(",") if item.strip()]
+        if raw_ips:
+            # Select the IP at the boundary of our trusted reverse proxy count
+            proxy_index = -FORWARDED_PROXIES_COUNT
+            candidate = raw_ips[proxy_index] if abs(proxy_index) <= len(raw_ips) else raw_ips[0]
+            try:
+                validated_ip = ipaddress.ip_address(candidate)
+                return str(validated_ip)
+            except ValueError:
+                logger.warning(
+                    f"Malformed IP '{candidate}' encountered in X-Forwarded-For header: '{forwarded}'"
+                )
+
+    if request.client and request.client.host:
+        try:
+            return str(ipaddress.ip_address(request.client.host))
+        except ValueError:
+            pass
+
+    return "127.0.0.1"
+
+
+# API Rate Limiter Setup
+# Defaults to in-memory moving-window rate limiting per worker.
+# Automatically switches to shared distributed rate limiting if REDIS_URL is configured.
+RATE_LIMIT_TEXT = os.getenv("RATE_LIMIT_TEXT", "15/minute").strip() or "15/minute"
+RATE_LIMIT_FILE = os.getenv("RATE_LIMIT_FILE", "10/minute").strip() or "10/minute"
+_redis_url = os.getenv("REDIS_URL", "").strip()
+_storage_uri = _redis_url if _redis_url else "memory://"
+
+limiter = Limiter(
+    key_func=get_client_ip,
+    storage_uri=_storage_uri,
+    default_limits=[],
+)
+
+
+def _rate_limit_exceeded_handler(request: Request, exc: RateLimitExceeded):
+    client_ip = get_client_ip(request)
+    logger.warning(
+        f"Rate limit exceeded for client {client_ip} on {request.method} {request.url.path}."
+    )
+    return JSONResponse(
+        status_code=status.HTTP_429_TOO_MANY_REQUESTS,
+        content={
+            "detail": "Rate limit exceeded. Too many report explanation requests. Please wait a moment and try again."
+        },
+    )
+
+
 # Initialize FastAPI application
 app = FastAPI(
     title="ReportSaathi API",
@@ -103,6 +178,11 @@ app = FastAPI(
     version="0.1.0",
     lifespan=lifespan,
 )
+
+# Attach rate limiter to app state and middleware
+app.state.limiter = limiter
+app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
+app.add_middleware(SlowAPIMiddleware)
 
 # Configure Cross-Origin Resource Sharing (CORS)
 # Reads ALLOWED_ORIGINS from environment variables (comma-separated).
@@ -264,7 +344,8 @@ async def telegram_webhook_endpoint(
 # Explanation Endpoints
 # ---------------------------------------------------------------------------
 @app.post("/explain-text", status_code=status.HTTP_200_OK)
-def explain_text_endpoint(payload: ExplainTextRequest):
+@limiter.limit(RATE_LIMIT_TEXT)
+def explain_text_endpoint(request: Request, payload: ExplainTextRequest):
     """
     Explains pasted medical report text using Gemini.
 
@@ -341,7 +422,9 @@ def explain_text_endpoint(payload: ExplainTextRequest):
 
 
 @app.post("/explain-file", status_code=status.HTTP_200_OK)
+@limiter.limit(RATE_LIMIT_FILE)
 def explain_file_endpoint(
+    request: Request,
     file: UploadFile = File(..., description="Uploaded medical report image or PDF"),
     language: str = Form("English", description="Target language ('English', 'Hindi', 'Kannada')"),
 ):
@@ -438,10 +521,10 @@ def explain_file_endpoint(
             detail=str(ve),
         )
     except Exception as e:
-        logger.error(f"OCR processing failed: {e}")
+        logger.error(f"OCR processing failed: {e}", exc_info=True)
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Failed to extract text from the uploaded document: {str(e)}",
+            detail="An internal error occurred while extracting text from the document. Please ensure the document is clear and try again.",
         )
 
     # Check if any readable text was extracted
